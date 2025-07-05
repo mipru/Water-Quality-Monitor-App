@@ -1,7 +1,6 @@
 streamlit==1.34.0
-numpy==1.24.3
+numpy==1.23.5  # Changed from 1.24.3 to be compatible with TensorFlow
 pandas==1.5.3
 scikit-learn==1.2.2
 tensorflow==2.12.0
 joblib==1.2.0
-rich==13.7.1
