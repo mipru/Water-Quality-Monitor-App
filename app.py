@@ -9,45 +9,45 @@ st.title("💧 Smart Water Quality Analyzer")
 st.write("Upload your water test results to assess safety based on WHO guidelines and AI prediction.")
 
 # 🧠 Educational Notes
-with st.expander("ℹ️ WHO Guidelines & Water Parameters Explained"):
+with st.expander("ℹ️ WHO Guidelines & Parameters Explained"):
     st.markdown("""
-    **✅ Health-Based Parameters (WHO)**  
-    - **Coliforms**: 0 CFU/100 mL — presence indicates possible fecal contamination  
-    - **pH**: 6.5–8.5 — outside this range may cause corrosion or scaling  
-    - **TDS**: ≤ 1000 mg/L — affects taste and acceptability  
-    - **EC**: ≤ 1400 µS/cm — correlates with salinity and minerals  
+    **✅ Health-Based Parameters (WHO):**
+    - **Coliforms**: 0 CFU/100 mL — presence may indicate fecal contamination  
+    - **pH**: 6.5–8.5  
+    - **TDS**: ≤ 1000 mg/L  
+    - **EC**: ≤ 1400 µS/cm  
 
-    **🧱 Aesthetic / Operational Indicators**  
-    - **Hardness** (as CaCO₃):  
+    **🧱 Operational Indicators:**
+    - **Hardness** (as CaCO₃):
         - 0–60 → 💧 Soft  
         - 61–120 → 🧂 Moderately Hard  
         - 121–180 → 🪨 Hard  
         - >180 → ⚠️ Very Hard  
-    - **DO (Dissolved Oxygen)**:  
+    - **DO (Dissolved Oxygen)**:
         - >6 mg/L → ✅ Good  
-        - <6 mg/L → ⚠️ Low (possible stagnation or pollution)
+        - <6 mg/L → ⚠️ Low  
     """)
 
-# --- File Upload ---
+# Upload CSVs
 phys_file = st.file_uploader("Upload Physical Parameter CSV", type=["csv"])
 bact_file = st.file_uploader("Upload Bacterial Test CSV", type=["csv"])
 
 if phys_file and bact_file:
     phys_df = pd.read_csv(phys_file)
     bact_df = pd.read_csv(bact_file)
-    st.success("✅ Files uploaded and recognized!")
+    st.success("✅ Files uploaded successfully!")
 
-    # Preprocess EC column
+    # Split EC if formatted as "value/temp"
     try:
         phys_df[['EC_val', 'Temp']] = phys_df['EC'].str.split('/', expand=True).astype(float)
     except Exception as e:
-        st.error("⚠️ Error splitting 'EC' into EC_val and Temp — please check the format (e.g. '1240/25.5')")
+        st.error("⚠️ Could not split 'EC' column into EC_val and Temp. Please ensure it's in 'value/temp' format.")
 
-    # Merge & Clean
+    # Merge and clean
     df = pd.merge(phys_df, bact_df, on="Sample", how="inner")
-    df.columns = df.columns.str.strip()  # Remove whitespace
+    df.columns = df.columns.str.strip()
 
-    # WHO Checks
+    # WHO logic
     df["pH_Status"] = df["pH"].apply(lambda x: "✅ OK" if 6.5 <= x <= 8.5 else "⚠️ Out of Range")
     df["TDS_Status"] = df["TDS"].apply(lambda x: "✅ OK" if x <= 1000 else "⚠️ High")
     df["EC_Status"] = df["EC_val"].apply(lambda x: "✅ OK" if x <= 1400 else "⚠️ High")
@@ -77,7 +77,7 @@ if phys_file and bact_file:
     else:
         df["DO_Status"] = "⚠️ Missing"
 
-    # Load Model & Predict
+    # Load model and scaler safely
     try:
         model = load_model("water_quality_ann.h5")
         scaler = joblib.load("scaler.pkl")
@@ -86,47 +86,50 @@ if phys_file and bact_file:
         preds = model.predict(X_scaled)
         df["Prediction"] = np.argmax(preds, axis=1)
         df["Interpretation"] = df["Prediction"].map({0: "Good", 1: "Moderate", 2: "Poor"})
-        st.success("🧠 AI model prediction complete!")
+        st.success("🧠 AI prediction complete!")
     except Exception as e:
         df["Interpretation"] = "Unavailable"
-        st.error(f"❌ Failed to load model or scaler: {e}")
+        st.error(f"❌ Model or scaler failed to load: {e}")
 
-    # Display Results
-    st.subheader("📋 Analysis Report")
-    st.dataframe(df[[
+    # Display safe subset
+    display_cols = [col for col in [
         "Sample", "pH", "pH_Status", "TDS", "TDS_Status",
         "EC_val", "EC_Status", "DO", "DO_Status",
         "Hardness", "Hardness_Status", "Coliform_Status", "Interpretation"
-    ]])
+    ] if col in df.columns]
 
-    # 🚨 Boiling Advisory
+    st.subheader("📋 Analysis Report")
+    st.dataframe(df[display_cols])
+
+    # Advisory block if coliforms found
     if "🚨 Unsafe" in df["Coliform_Status"].values:
-        st.error("🚨 Coliform contamination detected!")
+        st.error("🚨 Coliform bacteria detected in your sample!")
         with st.warning("💡 Boiling Water Advisory"):
             st.markdown("""
-            One or more samples show microbial contamination.  
-            Please **boil water for at least 1 minute at a rolling boil** before any household use like drinking, brushing, or cooking.  
-            Special care should be taken for children, elderly, and immunocompromised members.
+            Coliform bacteria may indicate fecal contamination.  
+            **Please boil water for at least 1 minute at a rolling boil** before drinking, brushing, or cooking.  
+            This is especially important for vulnerable individuals.
             """)
 
-    # Summary
+    # Parameter-based warning summary
     issues = []
     if "⚠️ Out of Range" in df["pH_Status"].values:
         issues.append("pH out of range")
     if "⚠️ High" in df["TDS_Status"].values or "⚠️ High" in df["EC_Status"].values:
-        issues.append("High salinity")
+        issues.append("Elevated salinity (TDS/EC)")
     if "⚠️ Very Hard" in df.get("Hardness_Status", []).values:
         issues.append("Very hard water")
     if "⚠️ Low" in df.get("DO_Status", []).values:
-        issues.append("Low oxygen levels")
+        issues.append("Low dissolved oxygen")
 
     if not issues and "🚨 Unsafe" not in df["Coliform_Status"].values:
-        st.success("✅ All parameters are within safe and acceptable ranges.")
-    else:
-        st.warning("⚠️ Other potential issues detected: " + ", ".join(issues) if issues else "⚠️")
+        st.success("✅ All parameters appear safe or acceptable.")
+    elif issues:
+        st.warning("⚠️ Potential issues detected: " + ", ".join(issues))
 
 else:
     st.info("📂 Please upload both Physical and Bacterial CSV files to begin.")
+
 
 
 
