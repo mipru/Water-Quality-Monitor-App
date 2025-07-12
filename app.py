@@ -5,9 +5,9 @@ import joblib
 import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
 
-st.set_page_config(page_title=Water Quality Analyzer, page_icon=💧)
-st.title(💧 Water Safety Dashboard)
-st.write(Upload your test results to evaluate safety using WHO guidelines and AI predictions.)
+st.set_page_config(page_title="Water Quality Monitor", page_icon="💧")
+st.title("💧 Smart Water Quality Analyzer")
+st.write("Upload your water test results to check safety based on WHO guidelines and AI prediction.")
 
 # 🧠 Educational Section
 with st.expander(ℹ️ WHO Guidelines & Key Indicators)
