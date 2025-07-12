@@ -43,9 +43,9 @@ if phys_file and bact_file:
     if 'ph' in df.columns:
         df["ph_status"] = df["ph"].apply(lambda x: "✅ OK" if 6.5 <= x <= 8.5 else "⚠️ Out of Range")
     if 'tds' in df.columns:
-        df["tds_status"] = df["tds"].apply(lambda x: "✅ OK" if x <= 1000 else "⚠️ High")
+        df["tds_status"] = df["tds"].apply(lambda x: "✅ OK" if x <= 300 else "⚠️ High")
     if 'ec_val' in df.columns:
-        df["ec_status"] = df["ec_val"].apply(lambda x: "✅ OK" if x <= 1400 else "⚠️ High")
+        df["ec_status"] = df["ec_val"].apply(lambda x: "✅ OK" if x <= 400 else "⚠️ High")
     if 'coliform' in df.columns:
         df["coliform_status"] = df["coliform"].apply(lambda x: "✅ Safe" if x == 0 else "🚨 Unsafe")
     else:
