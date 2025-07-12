@@ -2,22 +2,30 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
 
-st.set_page_config(page_title="Water Quality Analyzer", page_icon="💧")
-st.title("💧 Water Safety Dashboard")
-st.write("Upload your test results to evaluate safety using WHO guidelines and AI predictions.")
+st.set_page_config(page_title="Water Quality Monitor", page_icon="💧")
+st.title("💧 Smart Water Quality Analyzer")
+st.write("Upload your water test results to assess safety based on WHO guidelines and AI prediction.")
 
-# 🧠 Educational Section
-with st.expander("ℹ️ WHO Guidelines & Key Indicators"):
+# 🧠 Educational Notes
+with st.expander("ℹ️ WHO Guidelines & Parameters Explained"):
     st.markdown("""
-    - **Coliforms**: 0 CFU/100 mL → 🚨 Unsafe if > 0  
+    **✅ Health-Based Parameters (WHO):**
+    - **Coliforms**: 0 CFU/100 mL — presence may indicate fecal contamination  
     - **pH**: 6.5–8.5  
-    - **TDS**: ≤ 1000 mg/L  
-    - **EC**: ≤ 1400 µS/cm  
-    - **Hardness**: >500 mg/L may cause scaling  
-    - **DO (Dissolved Oxygen)**: >6 mg/L preferred for freshness  
+    - **TDS**: ≤ 300 mg/L  
+    - **EC**: ≤ 400 µS/cm  
+
+    **🧱 Operational Indicators:**
+    - **Hardness** (as CaCO₃):
+        - 0–60 → 💧 Soft  
+        - 61–120 → 🧂 Moderately Hard  
+        - 121–180 → 🪨 Hard  
+        - >180 → ⚠️ Very Hard  
+    - **DO (Dissolved Oxygen)**:
+        - >6 mg/L → ✅ Good  
+        - <6 mg/L → ⚠️ Low  
     """)
 
 # Upload CSVs
@@ -27,105 +35,103 @@ bact_file = st.file_uploader("Upload Bacterial Test CSV", type=["csv"])
 if phys_file and bact_file:
     phys_df = pd.read_csv(phys_file)
     bact_df = pd.read_csv(bact_file)
-    st.success("✅ Files uploaded!")
+    st.success("✅ Files uploaded successfully!")
 
-    # Split EC into EC_val and Temp
+    # Split EC if formatted as "value/temp"
     try:
-        phys_df[['ec_val', 'temp']] = phys_df['EC'].str.split('/', expand=True).astype(float)
-    except Exception:
-        st.error("⚠️ Unable to split 'EC'. Please ensure it's in 'value/temp' format (e.g., '1400/25').")
+        phys_df[['EC_val', 'Temp']] = phys_df['EC'].str.split('/', expand=True).astype(float)
+    except Exception as e:
+        st.error("⚠️ Could not split 'EC' column into EC_val and Temp. Please ensure it's in 'value/temp' format.")
 
-    # Merge data
+    # Merge and clean
     df = pd.merge(phys_df, bact_df, on="Sample", how="inner")
-    df.columns = df.columns.str.strip().str.lower()
+    df.columns = df.columns.str.strip()
 
-    # WHO Checks
-    if 'ph' in df.columns:
-        df["ph_status"] = df["ph"].apply(lambda x: "✅ OK" if 6.5 <= x <= 8.5 else "⚠️ Out of Range")
-    if 'tds' in df.columns:
-        df["tds_status"] = df["tds"].apply(lambda x: "✅ OK" if x <= 1000 else "⚠️ High")
-    if 'ec_val' in df.columns:
-        df["ec_status"] = df["ec_val"].apply(lambda x: "✅ OK" if x <= 1400 else "⚠️ High")
-    if 'coliform' in df.columns:
-        df["coliform_status"] = df["coliform"].apply(lambda x: "✅ Safe" if x == 0 else "🚨 Unsafe")
+    # WHO logic
+    df["pH_Status"] = df["pH"].apply(lambda x: "✅ OK" if 6.5 <= x <= 8.5 else "⚠️ Out of Range")
+    df["TDS_Status"] = df["TDS"].apply(lambda x: "✅ OK" if x <= 1000 else "⚠️ High")
+    df["EC_Status"] = df["EC_val"].apply(lambda x: "✅ OK" if x <= 1400 else "⚠️ High")
+
+    if "Coliform" in df.columns:
+        df["Coliform_Status"] = df["Coliform"].apply(lambda x: "✅ Safe" if x == 0 else "🚨 Unsafe")
     else:
-        df["coliform_status"] = "⚠️ Missing"
+        df["Coliform_Status"] = "⚠️ Missing"
+        st.warning("Column 'Coliform' not found — skipping microbial safety check.")
 
-    if "hardness" in df.columns:
-        df["hardness_status"] = df["hardness"].apply(
-            lambda x: "💧 Soft" if x <= 60 else
-                      "🧂 Moderate" if x <= 120 else
-                      "🪨 Hard" if x <= 180 else
-                      "⚠️ Very Hard"
-        )
+    if "Hardness" in df.columns:
+        def classify_hardness(h):
+            if h <= 60:
+                return "💧 Soft"
+            elif h <= 120:
+                return "🧂 Moderately Hard"
+            elif h <= 180:
+                return "🪨 Hard"
+            else:
+                return "⚠️ Very Hard"
+        df["Hardness_Status"] = df["Hardness"].apply(classify_hardness)
     else:
-        df["hardness_status"] = "⚠️ Missing"
+        df["Hardness_Status"] = "⚠️ Missing"
 
-    if "do" in df.columns:
-        df["do_status"] = df["do"].apply(lambda x: "✅ Good" if x >= 6 else "⚠️ Low")
+    if "DO" in df.columns:
+        df["DO_Status"] = df["DO"].apply(lambda x: "✅ Good" if x >= 6 else "⚠️ Low")
     else:
-        df["do_status"] = "⚠️ Missing"
+        df["DO_Status"] = "⚠️ Missing"
 
-    # AI prediction
+    # Load model and scaler safely
     try:
         model = load_model("water_quality_ann.h5")
         scaler = joblib.load("scaler.pkl")
-        features = df[["ec_val", "temp", "ph", "tds"]]
+        features = df[["EC_val", "Temp", "pH", "TDS"]]
         X_scaled = scaler.transform(features)
-        prediction = model.predict(X_scaled)
-        df["prediction"] = np.argmax(prediction, axis=1)
-        df["interpretation"] = df["prediction"].map({0: "Good", 1: "Moderate", 2: "Poor"})
-        st.success("🧠 AI predictions generated!")
+        preds = model.predict(X_scaled)
+        df["Prediction"] = np.argmax(preds, axis=1)
+        df["Interpretation"] = df["Prediction"].map({0: "Good", 1: "Moderate", 2: "Poor"})
+        st.success("🧠 AI prediction complete!")
     except Exception as e:
-        st.warning(f"⚠️ Model/scaler issue: {e}")
-        df["interpretation"] = "Unavailable"
+        df["Interpretation"] = "Unavailable"
+        st.error(f"❌ Model or scaler failed to load: {e}")
 
-    # Pie chart function
-    def pie_chart(col, title):
-        if col in df.columns:
-            counts = df[col].value_counts()
-            labels = counts.index.tolist()
-            sizes = counts.values.tolist()
-            colors = ["#4CAF50" if "✅" in l or "💧" in l else
-                      "#FFC107" if "⚠️" in l or "🧂" in l or "🪨" in l else
-                      "#F44336" for l in labels]
-            fig, ax = plt.subplots()
-            ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
-            ax.axis('equal')
-            st.subheader(f"📊 {title}")
-            st.pyplot(fig)
+    # Display safe subset
+    display_cols = [col for col in [
+        "Sample", "pH", "pH_Status", "TDS", "TDS_Status",
+        "EC_val", "EC_Status", "DO", "DO_Status",
+        "Hardness", "Hardness_Status", "Coliform_Status", "Interpretation"
+    ] if col in df.columns]
 
-    pie_chart("ph_status", "pH Compliance")
-    pie_chart("tds_status", "TDS Compliance")
-    pie_chart("ec_status", "Electrical Conductivity")
-    pie_chart("coliform_status", "Coliform Presence")
-    pie_chart("hardness_status", "Water Hardness")
-    pie_chart("do_status", "Dissolved Oxygen")
+    st.subheader("📋 Analysis Report")
+    st.dataframe(df[display_cols])
 
-    # Advisory
-    if "🚨 Unsafe" in df["coliform_status"].values:
-        st.error("🚨 Coliform bacteria detected!")
+    # Advisory block if coliforms found
+    if "🚨 Unsafe" in df["Coliform_Status"].values:
+        st.error("🚨 Coliform bacteria detected in your sample!")
         with st.warning("💡 Boiling Water Advisory"):
             st.markdown("""
-            One or more samples show microbial contamination.  
-            **Please boil water for at least 1 minute at a rolling boil** before drinking or cooking.  
-            Vulnerable groups (infants, elderly, immunocompromised) are especially at risk.
+            Coliform bacteria may indicate fecal contamination.  
+            **Please boil water for at least 1 minute at a rolling boil** before drinking, brushing, or cooking.  
+            This is especially important for vulnerable individuals.
             """)
 
-    # Text summary
-    st.subheader("📋 Overall Safety Summary")
-    param_columns = [
-        "ph_status", "tds_status", "ec_status",
-        "coliform_status", "hardness_status", "do_status"
-    ]
-    for col in param_columns:
-        if col in df.columns:
-            total = len(df)
-            safe = df[col].str.contains("✅|💧|🧂|🪨").sum()
-            st.markdown(f"**{col.replace('_status','').upper()}**: {safe/total*100:.1f}% samples within acceptable range.")
+    # Parameter-based warning summary
+    issues = []
+    if "⚠️ Out of Range" in df["pH_Status"].values:
+        issues.append("pH out of range")
+    if "⚠️ High" in df["TDS_Status"].values or "⚠️ High" in df["EC_Status"].values:
+        issues.append("Elevated salinity (TDS/EC)")
+    if "⚠️ Very Hard" in df.get("Hardness_Status", []).values:
+        issues.append("Very hard water")
+    if "⚠️ Low" in df.get("DO_Status", []).values:
+        issues.append("Low dissolved oxygen")
+
+    if not issues and "🚨 Unsafe" not in df["Coliform_Status"].values:
+        st.success("✅ All parameters appear safe or acceptable.")
+    elif issues:
+        st.warning("⚠️ Potential issues detected: " + ", ".join(issues))
 
 else:
-    st.info("📂 Please upload both Physical and Bacterial CSV files to continue.")
+    st.info("📂 Please upload both Physical and Bacterial CSV files to begin.")
+
+
+
 
 
 
