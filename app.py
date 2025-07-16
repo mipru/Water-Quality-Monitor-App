@@ -41,7 +41,7 @@ if phys_file and bact_file:
 
     # WHO Checks
     if 'ph' in df.columns:
-        df["ph_status"] = df["ph"].apply(lambda x: "✅ OK" if 6.5 <= x <= 8.5 else "⚠️ Out of Range")
+        df["ph_status"] = df["ph"].apply(lambda x: "✅ OK" if 6.5 <= x <= 7.5 else "⚠️ Out of Range")
     if 'tds' in df.columns:
         df["tds_status"] = df["tds"].apply(lambda x: "✅ OK" if x <= 300 else "⚠️ High")
     if 'ec_val' in df.columns:
