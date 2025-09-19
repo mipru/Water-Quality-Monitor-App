@@ -4,8 +4,6 @@ import numpy as np
 import joblib
 import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
-import folium
-from streamlit_folium import st_folium
 
 # ---------------------------
 # Page Config
@@ -206,48 +204,20 @@ elif page == "Map":
     
     st.info("💡 Make sure you have Google Earth installed or use the web version at earth.google.com")
 
-    # Optional: Also show the interactive folium map
-    st.subheader("📍 Interactive Map Preview")
+    # Show sample data preview if available
     if st.session_state["history"]:
         latest_df = st.session_state["history"][-1]
+        st.subheader("📍 Sample Data Preview")
         
-        # Check if required columns exist
-        if all(col in latest_df.columns for col in ["lat", "lon", "interpretation"]):
-            # Get valid coordinates
-            valid_coords = latest_df.dropna(subset=["lat", "lon"])
-            
-            if len(valid_coords) > 0:
-                m = folium.Map(location=[valid_coords["lat"].mean(), valid_coords["lon"].mean()], zoom_start=10)
-                
-                for _, row in valid_coords.iterrows():
-                    # Handle missing sample names
-                    sample_name = row.get('sample', 'Unknown')
-                    interpretation = row.get('interpretation', 'Unknown')
-                    
-                    # Determine marker color
-                    if interpretation == "Good":
-                        color = "green"
-                    elif interpretation == "Moderate":
-                        color = "orange"
-                    elif interpretation == "Poor":
-                        color = "red"
-                    else:
-                        color = "gray"
-                    
-                    popup_text = f"Sample: {sample_name}<br>Status: {interpretation}"
-                    folium.Marker(
-                        location=[row["lat"], row["lon"]],
-                        popup=popup_text,
-                        icon=folium.Icon(color=color)
-                    ).add_to(m)
-                
-                st_folium(m, width=700, height=500)
-            else:
-                st.info("🌍 No valid coordinates found in the data for interactive map.")
+        # Check if coordinates exist
+        if all(col in latest_df.columns for col in ["lat", "lon"]):
+            st.write("Coordinates found in your data:")
+            coord_df = latest_df[["sample", "lat", "lon", "interpretation"]].dropna(subset=["lat", "lon"])
+            st.dataframe(coord_df.head())
         else:
-            st.info("🌍 Required columns ('lat', 'lon', 'interpretation') not found in data for interactive map.")
+            st.info("No coordinate data ('lat' and 'lon' columns) found in your dataset.")
     else:
-        st.info("No data available. Upload files in Dashboard first to see the interactive map.")
+        st.info("No data available. Upload files in Dashboard first.")
 
 
 
