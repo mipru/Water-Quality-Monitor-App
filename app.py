@@ -191,7 +191,8 @@ elif page == "Map":
     earth_url = (
         "https://earth.google.com/web/@23.01551068,91.97356712,"
         "200.53061734a,2699.9592911d,35y,-0h,0t,0r/"
-        "data=CgRCAggBMikKJwolCiExV0NSdUd0VXlXX0s0eHBQaHlRNzFvTzBLcU1UN0YzS0cgAToDCgEwQgII
+        "data=CgRCAggBMikKJwolCiExV0NSdUd0VXlXX0s0eHBQaHlRNzFvTzBLcU1UN0YzS0cgAToDCgEwQgII"
+
 
 
 
