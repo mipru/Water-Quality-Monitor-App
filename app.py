@@ -188,19 +188,7 @@ elif page == "Map":
 
     # --- Google Earth Button ---
     st.subheader("🌐 Explore in Google Earth")
-    earth_url = "https://earth.google.com/web/@23.01551068,91.97356712,200.53061734a,2699.9592911d,35y,-0h,0t,0r/data=CgRCAggBMikKJwolCiExV0NSdUd0VXlXX0s
-
-# --- Google Earth Button ---
-st.subheader("🌐 Explore in Google Earth")
-earth_url = "https://earth.google.com/web/@23.01551068,91.97356712,200.53061734a,2699.9592911d,35y,-0h,0t,0r/data=CgRCAggBMikKJwolCiExV0NSdUd0VXlXX0s0eHBQaHlRNzFvTzBLcU1UN0YzS0cgAToDCgEwQgIIAEoICIav0JwHEAE"
-
-st.markdown(
-    f'<a href="{earth_url}" target="_blank">'
-    '<button style="background-color:#4CAF50;color:white;'
-    'padding:10px 20px;border:none;border-radius:5px;cursor:pointer;">'
-    '👉 Open Google Earth View</button></a>',
-    unsafe_allow_html=True
-)
+    earth_url = "https://earth.google.com/web/@23.01551068,91.97356712,200.53061734a,2699.9592911d,35y,-0h,0t,0r/data=CgRCAggBMikKJwolCiExV0NSdUd0VXlXX
 
 
 
