@@ -53,8 +53,9 @@ if page == "Dashboard":
         # Split EC into EC_val and Temp
         try:
             phys_df[['ec_val', 'temp']] = phys_df['EC'].str.split('/', expand=True).astype(float)
-        except Exception:
-            st.error("⚠️ Unable to split 'EC'. Please ensure it's in 'value/temp' format (e.g., '1400/25').")
+        except Exception as e:
+            st.error(f"⚠️ Unable to split 'EC'. Please ensure it's in 'value/temp' format (e.g., '1400/25'). Error: {e}")
+            st.stop()
 
         # Merge data
         df = pd.merge(phys_df, bact_df, on="Sample", how="inner")
@@ -62,11 +63,20 @@ if page == "Dashboard":
 
         # WHO Checks
         if 'ph' in df.columns:
-            df["ph_status"] = df["ph"].apply(lambda x: "✅ OK" if 6.5 <= x <= 7.5 else "⚠️ Out of Range")
+            df["ph_status"] = df["ph"].apply(lambda x: "✅ OK" if 6.5 <= x <= 8.5 else "⚠️ Out of Range")
+        else:
+            df["ph_status"] = "⚠️ Missing"
+            
         if 'tds' in df.columns:
-            df["tds_status"] = df["tds"].apply(lambda x: "✅ OK" if x <= 300 else "⚠️ High")
+            df["tds_status"] = df["tds"].apply(lambda x: "✅ OK" if x <= 1000 else "⚠️ High")
+        else:
+            df["tds_status"] = "⚠️ Missing"
+            
         if 'ec_val' in df.columns:
-            df["ec_status"] = df["ec_val"].apply(lambda x: "✅ OK" if x <= 400 else "⚠️ High")
+            df["ec_status"] = df["ec_val"].apply(lambda x: "✅ OK" if x <= 1400 else "⚠️ High")
+        else:
+            df["ec_status"] = "⚠️ Missing"
+            
         if 'coliform' in df.columns:
             df["coliform_status"] = df["coliform"].apply(lambda x: "✅ Safe" if x == 0 else "🚨 Unsafe")
         else:
@@ -100,22 +110,27 @@ if page == "Dashboard":
         except Exception as e:
             st.warning(f"⚠️ Model/scaler issue: {e}")
             df["interpretation"] = "Unavailable"
+            df["prediction"] = -1
 
         # Pie chart function
         def pie_chart(col, title):
             if col in df.columns:
                 counts = df[col].value_counts()
-                labels = counts.index.tolist()
-                sizes = counts.values.tolist()
-                colors = ["#4CAF50" if "✅" in l or "💧" in l else
-                          "#FFC107" if "⚠️" in l or "🧂" in l or "🪨" in l else
-                          "#F44336" for l in labels]
-                fig, ax = plt.subplots()
-                ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
-                ax.axis('equal')
-                st.subheader(f"📊 {title}")
-                st.pyplot(fig)
+                if len(counts) > 0:
+                    labels = counts.index.tolist()
+                    sizes = counts.values.tolist()
+                    colors = ["#4CAF50" if "✅" in str(l) or "💧" in str(l) else
+                              "#FFC107" if "⚠️" in str(l) or "🧂" in str(l) or "🪨" in str(l) else
+                              "#F44336" for l in labels]
+                    fig, ax = plt.subplots()
+                    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
+                    ax.axis('equal')
+                    st.subheader(f"📊 {title}")
+                    st.pyplot(fig)
+                else:
+                    st.write(f"No data for {title}")
 
+        # Display pie charts
         pie_chart("ph_status", "pH Compliance")
         pie_chart("tds_status", "TDS Compliance")
         pie_chart("ec_status", "Electrical Conductivity")
@@ -124,9 +139,9 @@ if page == "Dashboard":
         pie_chart("do_status", "Dissolved Oxygen")
 
         # Advisory
-        if "🚨 Unsafe" in df["coliform_status"].values:
+        if "coliform_status" in df.columns and "🚨 Unsafe" in df["coliform_status"].values:
             st.error("🚨 Coliform bacteria detected!")
-            with st.warning("💡 Boiling Water Advisory"):
+            with st.expander("💡 Boiling Water Advisory"):
                 st.markdown("""
                 One or more samples show microbial contamination.  
                 **Please boil water for at least 1 minute at a rolling boil** before drinking or cooking.  
@@ -139,14 +154,16 @@ if page == "Dashboard":
             "ph_status", "tds_status", "ec_status",
             "coliform_status", "hardness_status", "do_status"
         ]
+        
         for col in param_columns:
             if col in df.columns:
                 total = len(df)
-                safe = df[col].str.contains("✅|💧|🧂|🪨").sum()
-                st.markdown(f"**{col.replace('_status','').upper()}**: {safe/total*100:.1f}% samples within acceptable range.")
+                # Use string methods safely
+                safe_count = df[col].astype(str).str.contains("✅|💧|🧂|🪨", regex=True).sum()
+                st.markdown(f"**{col.replace('_status','').upper()}**: {safe_count/total*100:.1f}% samples within acceptable range.")
 
         # Save to history
-        st.session_state["history"].append(df)
+        st.session_state["history"].append(df.copy())
 
     else:
         st.info("📂 Please upload both Physical and Bacterial CSV files to continue.")
@@ -168,30 +185,70 @@ elif page == "History":
 # ---------------------------
 elif page == "Map":
     st.title("🗺️ Map View of Sampling Points")
-
-    if st.session_state["history"]:
-        latest_df = st.session_state["history"][-1]  # show map for latest upload
-        if "lat" in latest_df.columns and "lon" in latest_df.columns:
-            m = folium.Map(location=[latest_df["lat"].mean(), latest_df["lon"].mean()], zoom_start=10)
-            for _, row in latest_df.iterrows():
-                popup_text = f"Sample: {row['sample']}<br>Status: {row['interpretation']}"
-                folium.Marker(
-                    location=[row["lat"], row["lon"]],
-                    popup=popup_text,
-                    icon=folium.Icon(color="green" if row["interpretation"]=="Good" else "red")
-                ).add_to(m)
-            st_folium(m, width=700, height=500)
-        else:
-            st.info("🌍 No coordinates found in data. Add 'lat' and 'lon' columns to enable map view.")
-    else:
-        st.info("No data available. Upload files in Dashboard first.")
-
-    # --- Google Earth Button ---
+    
+    # Google Earth Link Section
     st.subheader("🌐 Explore in Google Earth")
-    earth_url = (
-        "https://earth.google.com/web/@23.01551068,91.97356712,"
-        "200.53061734a,2699.9592911d,35y,-0h,0t,0r/"
-        "data=CgRCAggBMikKJwolCiExV0NSdUd0VXlXX0s0eHBQaHlRNzFvTzBLcU1UN0YzS0cgAToDCgEwQgII"
+    st.markdown("""
+    Click the button below to view the water quality results in Google Earth. 
+    This will open your Google Earth application or web version with the sampling locations and results.
+    """)
+    
+    # Your Google Earth link
+    earth_url = "https://earth.google.com/web/@23.01551068,91.97356712,200.53061734a,2699.9592911d,35y,-0h,0t,0r/data=CgRCAggBMikKJwolCiExV0NSdUd0VXlXX0s0eHBQaHlRNzFvTzBLcU1UN0YzS0cgAToDCgEwQgII"
+    
+    st.markdown(f"""
+    <a href="{earth_url}" target="_blank">
+        <button style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
+            🗺️ Open in Google Earth
+        </button>
+    </a>
+    """, unsafe_allow_html=True)
+    
+    st.info("💡 Make sure you have Google Earth installed or use the web version at earth.google.com")
+
+    # Optional: Also show the interactive folium map
+    st.subheader("📍 Interactive Map Preview")
+    if st.session_state["history"]:
+        latest_df = st.session_state["history"][-1]
+        
+        # Check if required columns exist
+        if all(col in latest_df.columns for col in ["lat", "lon", "interpretation"]):
+            # Get valid coordinates
+            valid_coords = latest_df.dropna(subset=["lat", "lon"])
+            
+            if len(valid_coords) > 0:
+                m = folium.Map(location=[valid_coords["lat"].mean(), valid_coords["lon"].mean()], zoom_start=10)
+                
+                for _, row in valid_coords.iterrows():
+                    # Handle missing sample names
+                    sample_name = row.get('sample', 'Unknown')
+                    interpretation = row.get('interpretation', 'Unknown')
+                    
+                    # Determine marker color
+                    if interpretation == "Good":
+                        color = "green"
+                    elif interpretation == "Moderate":
+                        color = "orange"
+                    elif interpretation == "Poor":
+                        color = "red"
+                    else:
+                        color = "gray"
+                    
+                    popup_text = f"Sample: {sample_name}<br>Status: {interpretation}"
+                    folium.Marker(
+                        location=[row["lat"], row["lon"]],
+                        popup=popup_text,
+                        icon=folium.Icon(color=color)
+                    ).add_to(m)
+                
+                st_folium(m, width=700, height=500)
+            else:
+                st.info("🌍 No valid coordinates found in the data for interactive map.")
+        else:
+            st.info("🌍 Required columns ('lat', 'lon', 'interpretation') not found in data for interactive map.")
+    else:
+        st.info("No data available. Upload files in Dashboard first to see the interactive map.")
+
 
 
 
