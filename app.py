@@ -4,6 +4,10 @@ import numpy as np
 import joblib
 import matplotlib.pyplot as plt
 from tensorflow.keras.models import load_model
+import json
+import base64
+from io import BytesIO
+import time
 
 # ---------------------------
 # Page Config
@@ -16,10 +20,23 @@ st.set_page_config(page_title="Water Quality Analyzer", page_icon="💧")
 page = st.sidebar.radio("📌 Navigation", ["Dashboard", "History", "Map"])
 
 # ---------------------------
-# Initialize Session State
+# Initialize Shared History (using session state as persistent storage)
 # ---------------------------
-if "history" not in st.session_state:
-    st.session_state["history"] = []
+if "shared_history" not in st.session_state:
+    st.session_state["shared_history"] = []
+
+# ---------------------------
+# Helper function to convert matplotlib figure to base64 for storage
+# ---------------------------
+def fig_to_base64(fig):
+    buf = BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", dpi=100)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode("utf-8")
+
+def base64_to_fig(base64_str):
+    buf = BytesIO(base64.b64decode(base64_str))
+    return plt.imread(buf)
 
 # ---------------------------
 # Dashboard Page
@@ -111,30 +128,40 @@ if page == "Dashboard":
             df["prediction"] = -1
 
         # Pie chart function
-        def pie_chart(col, title):
-            if col in df.columns:
-                counts = df[col].value_counts()
+        def create_pie_chart(data, col, title):
+            if col in data.columns:
+                counts = data[col].value_counts()
                 if len(counts) > 0:
                     labels = counts.index.tolist()
                     sizes = counts.values.tolist()
                     colors = ["#4CAF50" if "✅" in str(l) or "💧" in str(l) else
                               "#FFC107" if "⚠️" in str(l) or "🧂" in str(l) or "🪨" in str(l) else
                               "#F44336" for l in labels]
-                    fig, ax = plt.subplots()
+                    fig, ax = plt.subplots(figsize=(8, 6))
                     ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors)
                     ax.axis('equal')
-                    st.subheader(f"📊 {title}")
-                    st.pyplot(fig)
-                else:
-                    st.write(f"No data for {title}")
+                    plt.title(title, fontsize=14, fontweight='bold')
+                    return fig
+            return None
 
         # Display pie charts
-        pie_chart("ph_status", "pH Compliance")
-        pie_chart("tds_status", "TDS Compliance")
-        pie_chart("ec_status", "Electrical Conductivity")
-        pie_chart("coliform_status", "Coliform Presence")
-        pie_chart("hardness_status", "Water Hardness")
-        pie_chart("do_status", "Dissolved Oxygen")
+        st.subheader("📊 Analysis Results")
+        
+        charts_data = {}
+        param_titles = {
+            "ph_status": "pH Compliance",
+            "tds_status": "TDS Compliance", 
+            "ec_status": "Electrical Conductivity",
+            "coliform_status": "Coliform Presence",
+            "hardness_status": "Water Hardness",
+            "do_status": "Dissolved Oxygen"
+        }
+        
+        for param, title in param_titles.items():
+            fig = create_pie_chart(df, param, title)
+            if fig:
+                charts_data[title] = fig_to_base64(fig)
+                st.pyplot(fig)
 
         # Advisory
         if "coliform_status" in df.columns and "🚨 Unsafe" in df["coliform_status"].values:
@@ -153,30 +180,104 @@ if page == "Dashboard":
             "coliform_status", "hardness_status", "do_status"
         ]
         
+        summary_data = {}
         for col in param_columns:
             if col in df.columns:
                 total = len(df)
-                # Use string methods safely
                 safe_count = df[col].astype(str).str.contains("✅|💧|🧂|🪨", regex=True).sum()
-                st.markdown(f"**{col.replace('_status','').upper()}**: {safe_count/total*100:.1f}% samples within acceptable range.")
+                percentage = safe_count/total*100
+                summary_data[col.replace('_status','').upper()] = percentage
+                st.markdown(f"**{col.replace('_status','').upper()}**: {percentage:.1f}% samples within acceptable range.")
 
-        # Save to history
-        st.session_state["history"].append(df.copy())
+        # AI prediction summary
+        if "interpretation" in df.columns:
+            st.subheader("🤖 AI Quality Assessment")
+            quality_counts = df["interpretation"].value_counts()
+            for quality, count in quality_counts.items():
+                st.markdown(f"**{quality}**: {count} samples ({count/len(df)*100:.1f}%)")
+
+        # Save to shared history
+        history_entry = {
+            "timestamp": time.time(),
+            "summary": summary_data,
+            "charts": charts_data,
+            "total_samples": len(df),
+            "ai_quality": dict(df["interpretation"].value_counts()) if "interpretation" in df.columns else {},
+            "has_coliform_alert": "🚨 Unsafe" in df["coliform_status"].values if "coliform_status" in df.columns else False,
+            "user": f"User_{int(time.time()) % 10000}"  # Simple user identifier
+        }
+        
+        st.session_state["shared_history"].append(history_entry)
+        st.success("✅ Analysis completed and saved to shared history!")
 
     else:
         st.info("📂 Please upload both Physical and Bacterial CSV files to continue.")
 
 # ---------------------------
-# History Page
+# History Page (Shared across all users)
 # ---------------------------
 elif page == "History":
-    st.title("📜 Result History")
-    if st.session_state["history"]:
-        for i, past_df in enumerate(st.session_state["history"], 1):
-            with st.expander(f"Result {i}"):
-                st.dataframe(past_df)
+    st.title("📜 Shared Analysis History")
+    st.info("🌐 Viewing all analysis results from all users")
+    
+    if st.session_state["shared_history"]:
+        # Display in reverse order (newest first)
+        for i, history_entry in enumerate(reversed(st.session_state["shared_history"]), 1):
+            with st.expander(f"Analysis {i} - {time.strftime('%Y-%m-%d %H:%M', time.localtime(history_entry['timestamp']))} (by {history_entry['user']})"):
+                
+                # Display summary statistics
+                st.subheader("📋 Summary Statistics")
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Total Samples", history_entry["total_samples"])
+                
+                with col2:
+                    if history_entry["has_coliform_alert"]:
+                        st.error("🚨 Coliform Detected")
+                    else:
+                        st.success("✅ No Coliform Issues")
+                
+                with col3:
+                    st.write(f"User: {history_entry['user']}")
+                
+                # Display parameter percentages
+                st.subheader("Parameter Compliance")
+                for param, percentage in history_entry["summary"].items():
+                    st.progress(float(percentage/100), text=f"{param}: {percentage:.1f}% compliant")
+                
+                # Display AI quality assessment
+                if history_entry["ai_quality"]:
+                    st.subheader("🤖 AI Quality Assessment")
+                    for quality, count in history_entry["ai_quality"].items():
+                        percentage = count/history_entry["total_samples"]*100
+                        st.write(f"**{quality}**: {count} samples ({percentage:.1f}%)")
+                
+                # Display charts
+                st.subheader("📊 Analysis Charts")
+                if history_entry["charts"]:
+                    cols = st.columns(2)
+                    col_idx = 0
+                    
+                    for title, fig_base64 in history_entry["charts"].items():
+                        # Create a temporary figure for display
+                        fig, ax = plt.subplots(figsize=(6, 5))
+                        img = base64_to_fig(fig_base64)
+                        ax.imshow(img)
+                        ax.axis('off')
+                        ax.set_title(title, fontsize=12, fontweight='bold')
+                        
+                        with cols[col_idx]:
+                            st.pyplot(fig)
+                        
+                        col_idx = (col_idx + 1) % 2
+                        plt.close(fig)
+                else:
+                    st.info("No charts available for this analysis.")
+                    
+                st.markdown("---")
     else:
-        st.info("No history yet. Upload files in Dashboard first.")
+        st.info("No analysis history yet. Upload files in Dashboard first to generate results.")
 
 # ---------------------------
 # Map Page
@@ -192,7 +293,7 @@ elif page == "Map":
     """)
     
     # Your Google Earth link
-    earth_url = "https://earth.google.com/earth/d/1BvhbCLWeRHEIu19l6V2YTBDXzrejSlgs?usp=sharing"
+    earth_url = "https://earth.google.com/web/@23.01551068,91.97356712,200.53061734a,2699.9592911d,35y,-0h,0t,0r/data=CgRCAggBMikKJwolCiExV0NSdUd0VXlXX0s0eHBQaHlRNzFvTzBLcU1UN0YzS0cgAToDCgEwQgII"
     
     st.markdown(f"""
     <a href="{earth_url}" target="_blank">
@@ -204,20 +305,20 @@ elif page == "Map":
     
     st.info("💡 Make sure you have Google Earth installed or use the web version at earth.google.com")
 
-    # Show sample data preview if available
-    if st.session_state["history"]:
-        latest_df = st.session_state["history"][-1]
-        st.subheader("📍 Sample Data Preview")
+    # Show shared history info if available
+    if st.session_state["shared_history"]:
+        st.subheader("📊 Shared History Overview")
+        total_analyses = len(st.session_state["shared_history"])
+        latest_analysis = max(st.session_state["shared_history"], key=lambda x: x["timestamp"])
         
-        # Check if coordinates exist
-        if all(col in latest_df.columns for col in ["lat", "lon"]):
-            st.write("Coordinates found in your data:")
-            coord_df = latest_df[["sample", "lat", "lon", "interpretation"]].dropna(subset=["lat", "lon"])
-            st.dataframe(coord_df.head())
-        else:
-            st.info("No coordinate data ('lat' and 'lon' columns) found in your dataset.")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Total Analyses", total_analyses)
+        with col2:
+            st.write(f"Latest: {time.strftime('%Y-%m-%d %H:%M', time.localtime(latest_analysis['timestamp']))}")
     else:
-        st.info("No data available. Upload files in Dashboard first.")
+        st.info("No analysis data available. Upload files in Dashboard first.")
+
 
 
 
