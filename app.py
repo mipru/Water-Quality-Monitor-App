@@ -293,7 +293,7 @@ elif page == "Map":
     """)
     
     # Your Google Earth link
-    earth_url = "https://earth.google.com/earth/d/1BvhbCLWeRHEIu19l6V2YTBDXzrejSlgs?usp=sharing"
+    earth_url = "https://earth.google.com/earth/d/1Dl41EVJhvi4KIbI4dViC7mUyNVmNssVb?usp=sharing"
     
     st.markdown(f"""
     <a href="{earth_url}" target="_blank">
@@ -318,6 +318,7 @@ elif page == "Map":
             st.write(f"Latest: {time.strftime('%Y-%m-%d %H:%M', time.localtime(latest_analysis['timestamp']))}")
     else:
         st.info("No analysis data available. Upload files in Dashboard first.")
+
 
 
 
