@@ -50,8 +50,8 @@ if page == "Dashboard":
         st.markdown("""
         - **Coliforms**: 0 CFU/100 mL → 🚨 Unsafe if > 0  
         - **pH**: 6.5–8.5  
-        - **TDS**: ≤ 1000 mg/L  
-        - **EC**: ≤ 1400 µS/cm  
+        - **TDS**: ≤ 300 mg/L  
+        - **EC**: ≤ 750 µS/cm  
         - **Hardness**: >500 mg/L may cause scaling  
         - **DO (Dissolved Oxygen)**: >6 mg/L preferred for freshness  
         """)
@@ -318,6 +318,7 @@ elif page == "Map":
             st.write(f"Latest: {time.strftime('%Y-%m-%d %H:%M', time.localtime(latest_analysis['timestamp']))}")
     else:
         st.info("No analysis data available. Upload files in Dashboard first.")
+
 
 
 
