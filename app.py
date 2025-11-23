@@ -83,12 +83,12 @@ if page == "Dashboard":
             df["ph_status"] = "⚠️ Missing"
             
         if 'tds' in df.columns:
-            df["tds_status"] = df["tds"].apply(lambda x: "✅ OK" if x <= 1000 else "⚠️ High")
+            df["tds_status"] = df["tds"].apply(lambda x: "✅ OK" if x <= 300 else "⚠️ High")
         else:
             df["tds_status"] = "⚠️ Missing"
             
         if 'ec_val' in df.columns:
-            df["ec_status"] = df["ec_val"].apply(lambda x: "✅ OK" if x <= 1400 else "⚠️ High")
+            df["ec_status"] = df["ec_val"].apply(lambda x: "✅ OK" if x <= 750 else "⚠️ High")
         else:
             df["ec_status"] = "⚠️ Missing"
             
@@ -318,6 +318,7 @@ elif page == "Map":
             st.write(f"Latest: {time.strftime('%Y-%m-%d %H:%M', time.localtime(latest_analysis['timestamp']))}")
     else:
         st.info("No analysis data available. Upload files in Dashboard first.")
+
 
 
 
